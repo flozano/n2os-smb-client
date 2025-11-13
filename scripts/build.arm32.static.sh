@@ -2,22 +2,33 @@
 set -euo pipefail
 
 KRB_IMPL="${KRB_IMPL:-NONE}"
-if [[ "${KRB_IMPL}" != "NONE" && "${KRB_IMPL}" != "MIT" ]]; then
-    echo "Static ARM32 build supports KRB_IMPL=NONE or KRB_IMPL=MIT (current: ${KRB_IMPL})." >&2
+if [[ "${KRB_IMPL}" != "NONE" ]]; then
+    echo "Musl-based static ARM32 build currently supports only KRB_IMPL=NONE." >&2
     exit 1
 fi
 
 ARTIFACT_DIR="${ARTIFACT_DIR:-/artifacts}"
 mkdir -p "${ARTIFACT_DIR}"
 
-triplets=(arm-linux-gnueabihf arm-linux-gnueabi)
-suffixes=(armhf armel)
+TOOLCHAINS=(
+    "armhf:arm-linux-musleabihf:/opt/arm-linux-musleabihf-cross"
+    "armel:arm-linux-musleabi:/opt/arm-linux-musleabi-cross"
+)
 
-for idx in "${!triplets[@]}"; do
-    triplet="${triplets[$idx]}"
-    suffix="${suffixes[$idx]}"
+for entry in "${TOOLCHAINS[@]}"; do
+    IFS=":" read -r suffix triplet root <<< "${entry}"
     build_dir="build_${suffix}_static"
-    sysroot="/usr/${triplet}"
+    cc="${root}/bin/${triplet}-gcc"
+    cxx="${root}/bin/${triplet}-g++"
+    ar_bin="${root}/bin/${triplet}-ar"
+    ranlib_bin="${root}/bin/${triplet}-ranlib"
+    strip_bin="${root}/bin/${triplet}-strip"
+    sysroot="${root}/${triplet}"
+
+    if [[ ! -x "${cc}" ]]; then
+        echo "Missing compiler ${cc}. Ensure musl toolchains are available in ${root}." >&2
+        exit 1
+    fi
 
     cmake -S . -B "${build_dir}" \
         -G Ninja \
@@ -27,23 +38,21 @@ for idx in "${!triplets[@]}"; do
         -DCMAKE_SYSTEM_NAME=Linux \
         -DCMAKE_SYSTEM_PROCESSOR=arm \
         -DCMAKE_SYSROOT="${sysroot}" \
-        -DCMAKE_C_COMPILER="${triplet}-gcc" \
-        -DCMAKE_CXX_COMPILER="${triplet}-g++" \
+        -DCMAKE_C_COMPILER="${cc}" \
+        -DCMAKE_CXX_COMPILER="${cxx}" \
+        -DCMAKE_AR="${ar_bin}" \
+        -DCMAKE_RANLIB="${ranlib_bin}" \
         -DCMAKE_FIND_ROOT_PATH="${sysroot}" \
         -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
         -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
         -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-        -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc" \
+        -DCMAKE_EXE_LINKER_FLAGS="-static" \
         -DCMAKE_BUILD_RPATH="" \
         -DCMAKE_INSTALL_RPATH=""
 
     cmake --build "${build_dir}" --target n2os_smb_client --parallel
 
-    "${triplet}-strip" "${build_dir}/n2os_smb_client"
-    out_name="n2os_smb_client.linux_${suffix}_static"
-    if [[ "${KRB_IMPL}" != "NONE" ]]; then
-        out_name="n2os_smb_client.linux_${suffix}_static_${KRB_IMPL,,}"
-    fi
+    "${strip_bin}" "${build_dir}/n2os_smb_client"
     cp "${build_dir}/n2os_smb_client" \
-        "${ARTIFACT_DIR}/${out_name}"
+        "${ARTIFACT_DIR}/n2os_smb_client.linux_${suffix}_static_musl"
 done

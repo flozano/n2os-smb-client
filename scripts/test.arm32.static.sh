@@ -12,11 +12,12 @@ if [[ ! -d "${ARTIFACT_DIR}" ]]; then
     exit 1
 fi
 
+# shellcheck disable=SC2120
 find_binary() {
     local base="$1"
     local dir="$2"
     local fallback
-    for candidate in "${base}" "${base}_mit" "${base}_heimdal"; do
+    for candidate in "${base}" "${base}_musl"; do
         if [[ -f "${dir}/${candidate}" ]]; then
             echo "${dir}/${candidate}"
             return 0
