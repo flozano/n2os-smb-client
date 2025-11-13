@@ -14,6 +14,32 @@ KRB_IMPL env variable must be defined (MIT, HEIMDAL, or NONE).
 Use NONE to skip Kerberos/GSSAPI detection entirely (only NTLM/Basic auth will be available).
 HEIMDAL is currently not working.
 
+### Static ARM32 (Docker)
+
+Binaries for ARM32 (hard-float + soft-float) can be produced inside a Docker builder that cross-compiles the bundled dependencies:
+```bash
+docker build -f Dockerfile.arm32 -t smb-arm32 .
+```
+If you want the artifacts on the host, use BuildKit's export:
+```bash
+docker build -f Dockerfile.arm32 --output ./arm32-static .
+ls arm32-static
+```
+This yields `n2os_smb_client.linux_armhf_static` and `n2os_smb_client.linux_armel_static`, both fully static and built without Kerberos support.
+
+To include MIT Kerberos in the static binaries, pass `KRB_IMPL=MIT` (Heimdal is not available in this flow):
+```bash
+docker build -f Dockerfile.arm32 --build-arg KRB_IMPL=MIT --output ./arm32-static-mit .
+ls arm32-static-mit
+```
+Artifacts will be suffixed with `_mit` to distinguish them from the Kerberos-free builds.
+
+Use Docker-based emulation to sanity check the binaries (requires Docker Desktop or binfmt-qemu on Linux):
+```bash
+./scripts/test.arm32.static.sh arm32-static
+```
+The script launches arm32 Debian containers (arm/v7 for hard-float, arm/v5 for soft-float) and runs `--help` inside each so you can verify the executables start correctly. It automatically detects whether the artifacts include Kerberos (names ending in `_mit`).
+
 -DHAVE_LIBKRB5 is generating a warning in Linux build with MIT because we are forcing libsmb2 to compile with krb5 support.
 
 ### FreeBSD version
@@ -50,7 +76,7 @@ operations: ls, del, get and put.
 **Note that connection password can be passed using env variable N2OS_SMB_PASSWORD**
 
 ```text
-n2os-smb-client v.0.3.6 - (c) 2020-present Nozomi Networks Inc.
+n2os-smb-client v.0.3.7-flozano - (c) 2020-present Nozomi Networks Inc.; patches (c) 2025 Francisco A. Lozano.
 
 Usage:
 n2os-smb-client ls <smb2-url>

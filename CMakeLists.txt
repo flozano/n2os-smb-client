@@ -2,13 +2,30 @@ cmake_minimum_required(VERSION 3.12)
 
 project(n2os_smb_client)
 
-set(OPENSSL_USE_STATIC_LIBS TRUE)
-find_package(OpenSSL REQUIRED)
+# No direct OpenSSL dependency currently. Leave option for future use.
+option(USE_OPENSSL "Enable OpenSSL support" OFF)
+if(USE_OPENSSL)
+    set(OPENSSL_USE_STATIC_LIBS TRUE)
+    find_package(OpenSSL REQUIRED)
+endif()
 
-add_compile_options("-O2" "-fPIE" "-fPIC" "-fstack-protector" "-D_FORTIFY_SOURCE=2")
+option(ENABLE_STATIC_LINKING "Link n2os_smb_client statically" OFF)
 
-if(NOT APPLE)
-    add_link_options("-pie" "-Wl,-z,relro,-z,now")
+set(COMMON_COMPILE_OPTIONS "-O2" "-fPIC" "-fstack-protector" "-D_FORTIFY_SOURCE=2")
+if(NOT ENABLE_STATIC_LINKING)
+    list(APPEND COMMON_COMPILE_OPTIONS "-fPIE")
+endif()
+add_compile_options(${COMMON_COMPILE_OPTIONS})
+
+if(ENABLE_STATIC_LINKING)
+    if(APPLE)
+        message(FATAL_ERROR "ENABLE_STATIC_LINKING is not supported on macOS.")
+    endif()
+    add_link_options("-static" "-static-libgcc")
+else()
+    if(NOT APPLE)
+        add_link_options("-pie" "-Wl,-z,relro,-z,now")
+    endif()
 endif()
 
 set(CMAKE_CXX_STANDARD 11)
