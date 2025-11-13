@@ -32,6 +32,10 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Disable shared libs")
 
+if(CMAKE_CROSSCOMPILING)
+    add_compile_definitions(HAVE_ARC4RANDOM=0 HAVE_ARC4RANDOM_BUF=0)
+endif()
+
 ## LIB SMB2
 if (NOT "${CMAKE_SYSTEM}" MATCHES "Linux" AND NOT APPLE)
     # FreeBSD specific fixes
