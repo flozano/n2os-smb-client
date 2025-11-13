@@ -32,8 +32,7 @@ jobs:
             libkrb5-dev \
             libgssapi-krb5-2 \
             libssl-dev \
-            upx-ucl \
-            docker.io
+            upx-ucl
 
       - name: Build Linux x86_64 binary
         env:
