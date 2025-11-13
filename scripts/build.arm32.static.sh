@@ -10,23 +10,88 @@ fi
 ARTIFACT_DIR="${ARTIFACT_DIR:-/artifacts}"
 mkdir -p "${ARTIFACT_DIR}"
 
-TOOLCHAINS=(
+DEFAULT_TOOLCHAINS=(
     "armhf:arm-linux-musleabihf:/opt/arm-linux-musleabihf-cross"
     "armel:arm-linux-musleabi:/opt/arm-linux-musleabi-cross"
 )
 
+if [[ -n "${ARM32_TOOLCHAINS:-}" ]]; then
+    IFS=' ' read -r -a TOOLCHAINS <<< "${ARM32_TOOLCHAINS}"
+else
+    TOOLCHAINS=("${DEFAULT_TOOLCHAINS[@]}")
+fi
+
+find_tool() {
+    local root="$1"
+    local triplet="$2"
+    local tool="$3"
+    local resolved
+    if resolved=$(command -v "${triplet}-${tool}" 2>/dev/null); then
+        echo "${resolved}"
+        return 0
+    fi
+    local search_dirs=(
+        "${root}"
+        "${root}/bin"
+        "${root}/usr/bin"
+        "${root}/usr/local/bin"
+        "${root}/${triplet}"
+        "${root}/${triplet}/bin"
+        "${root}/sbin"
+        "${root}/usr/sbin"
+    )
+    local candidate
+    for dir in "${search_dirs[@]}"; do
+        candidate="${dir}/${triplet}-${tool}"
+        if [[ -x "${candidate}" ]]; then
+            echo "${candidate}"
+            return 0
+        fi
+    done
+    candidate=$(find "${root}" -type f -name "${triplet}-${tool}" -perm /111 2>/dev/null | head -n 1)
+    if [[ -n "${candidate}" ]]; then
+        echo "${candidate}"
+        return 0
+    fi
+    return 1
+}
+
 for entry in "${TOOLCHAINS[@]}"; do
     IFS=":" read -r suffix triplet root <<< "${entry}"
     build_dir="build_${suffix}_static"
-    cc="${root}/bin/${triplet}-gcc"
-    cxx="${root}/bin/${triplet}-g++"
-    ar_bin="${root}/bin/${triplet}-ar"
-    ranlib_bin="${root}/bin/${triplet}-ranlib"
-    strip_bin="${root}/bin/${triplet}-strip"
-    sysroot="${root}/${triplet}"
 
-    if [[ ! -x "${cc}" ]]; then
-        echo "Missing compiler ${cc}. Ensure musl toolchains are available in ${root}." >&2
+    cc=$(find_tool "${root}" "${triplet}" "gcc") || {
+        echo "Missing compiler for ${triplet} under ${root}" >&2
+        exit 1
+    }
+    if ! cxx=$(find_tool "${root}" "${triplet}" "g++"); then
+        cxx="${cc%gcc}g++"
+    fi
+    ar_bin=$(find_tool "${root}" "${triplet}" "ar") || {
+        echo "Missing ar for ${triplet}" >&2
+        exit 1
+    }
+    ranlib_bin=$(find_tool "${root}" "${triplet}" "ranlib") || {
+        echo "Missing ranlib for ${triplet}" >&2
+        exit 1
+    }
+    strip_bin=$(find_tool "${root}" "${triplet}" "strip") || {
+        echo "Missing strip for ${triplet}" >&2
+        exit 1
+    }
+
+    if [[ -d "${root}/${triplet}" ]]; then
+        sysroot="${root}/${triplet}"
+    elif [[ -d "${root}" ]]; then
+        sysroot="${root}"
+    else
+        sysroot="$(dirname "$(dirname "${cc}")")/${triplet}"
+    fi
+    if [[ ! -d "${sysroot}" && -d "$(dirname "${cc}")/../${triplet}" ]]; then
+        sysroot="$(dirname "${cc}")/../${triplet}"
+    fi
+    if [[ ! -d "${sysroot}" ]]; then
+        echo "Sysroot not found for ${triplet} within ${root}" >&2
         exit 1
     fi
 

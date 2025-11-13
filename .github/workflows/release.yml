@@ -11,6 +11,7 @@ permissions:
 
 env:
   KRB_IMPL_DEFAULT: NONE
+  SMB_TEST_PASSWORD: CiPassword123_
 
 jobs:
   build:
@@ -34,12 +35,19 @@ jobs:
             libssl-dev \
             upx-ucl
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Build Linux x86_64 binary
         env:
           KRB_IMPL: ${{ env.KRB_IMPL_DEFAULT }}
         run: |
           ./build.linux.sh
           tar czf n2os_smb_client.linux_x86_64.tar.gz -C bin n2os_smb_client.linux
+
+      - name: Native smoke test (--help)
+        run: |
+          ./bin/n2os_smb_client.linux --help
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -55,6 +63,56 @@ jobs:
       - name: Test ARM32 binaries via emulation
         run: |
           ./scripts/test.arm32.static.sh arm32-static
+
+      - name: Prepare Samba test environment
+        run: |
+          set -euo pipefail
+          SHARE_DIR="${GITHUB_WORKSPACE}/ci_share"
+          mkdir -p "${SHARE_DIR}"
+          docker network create smb-ci
+          docker run -d --name samba-test --network smb-ci \
+            -h samba-test \
+            -v "${SHARE_DIR}":/share \
+            dperson/samba -S -u "ci;${SMB_TEST_PASSWORD}" -s "ci;/share;yes;yes;yes;ci"
+          sleep 15
+
+      - name: Functional smoke test (x86_64, ls/put/get)
+        run: |
+          set -euo pipefail
+          docker run --rm --network smb-ci \
+            -e N2OS_SMB_PASSWORD="${SMB_TEST_PASSWORD}" \
+            -v "${GITHUB_WORKSPACE}":/workspace \
+            -w /workspace \
+            debian:bookworm bash -c '\
+              set -euo pipefail; \
+              echo "native smoke" > /tmp/ci_upload.txt; \
+              ./bin/n2os_smb_client.linux put /tmp/ci_upload.txt smb://ci@samba-test/ci/ci_upload.txt; \
+              ./bin/n2os_smb_client.linux ls smb://ci@samba-test/ci; \
+              ./bin/n2os_smb_client.linux get smb://ci@samba-test/ci/ci_upload.txt /tmp/ci_download.txt; \
+              diff -u /tmp/ci_upload.txt /tmp/ci_download.txt \
+            '
+
+      - name: Functional smoke test (ARM32, ls/put/get)
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/arm/v7 --network smb-ci \
+            -e N2OS_SMB_PASSWORD="${SMB_TEST_PASSWORD}" \
+            -v "${GITHUB_WORKSPACE}":/workspace \
+            -w /workspace \
+            debian:bookworm bash -c '\
+              set -euo pipefail; \
+              echo "arm smoke" > /tmp/ci_arm_upload.txt; \
+              /workspace/arm32-static/artifacts/n2os_smb_client.linux_armhf_static_musl put /tmp/ci_arm_upload.txt smb://ci@samba-test/ci/ci_arm_upload.txt; \
+              /workspace/arm32-static/artifacts/n2os_smb_client.linux_armhf_static_musl ls smb://ci@samba-test/ci; \
+              /workspace/arm32-static/artifacts/n2os_smb_client.linux_armhf_static_musl get smb://ci@samba-test/ci/ci_arm_upload.txt /tmp/ci_arm_download.txt; \
+              diff -u /tmp/ci_arm_upload.txt /tmp/ci_arm_download.txt \
+            '
+
+      - name: Tear down Samba test environment
+        if: always()
+        run: |
+          docker rm -f samba-test || true
+          docker network rm smb-ci || true
 
       - name: Package ARM32 artifacts
         run: |
@@ -73,3 +131,4 @@ jobs:
         with:
           files: |
             n2os_smb_client.linux_x86_64.tar.gz
+            n2os_smb_client.arm32_static.tar.gz
