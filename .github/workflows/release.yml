@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  KRB_IMPL_DEFAULT: NONE
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            libkrb5-dev \
+            libgssapi-krb5-2 \
+            libssl-dev \
+            upx-ucl \
+            docker.io
+
+      - name: Build Linux x86_64 binary
+        env:
+          KRB_IMPL: ${{ env.KRB_IMPL_DEFAULT }}
+        run: |
+          ./build.linux.sh
+          tar czf n2os_smb_client.linux_x86_64.tar.gz -C bin n2os_smb_client.linux
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build static ARM32 (no Kerberos)
+        run: |
+          docker buildx build \
+            --file Dockerfile.arm32 \
+            --build-arg KRB_IMPL=NONE \
+            --output type=local,dest=arm32-static \
+            .
+
+      - name: Build static ARM32 (MIT Kerberos)
+        run: |
+          docker buildx build \
+            --file Dockerfile.arm32 \
+            --build-arg KRB_IMPL=MIT \
+            --output type=local,dest=arm32-static-mit \
+            .
+
+      - name: Test ARM32 binaries via emulation
+        run: |
+          ./scripts/test.arm32.static.sh arm32-static
+          ./scripts/test.arm32.static.sh arm32-static-mit
+
+      - name: Package ARM32 artifacts
+        run: |
+          tar czf n2os_smb_client.arm32_static.tar.gz -C arm32-static artifacts
+          tar czf n2os_smb_client.arm32_static_mit.tar.gz -C arm32-static-mit artifacts
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            n2os_smb_client.linux_x86_64.tar.gz
+            n2os_smb_client.arm32_static.tar.gz
+            n2os_smb_client.arm32_static_mit.tar.gz
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            n2os_smb_client.linux_x86_64.tar.gz
+            n2os_smb_client.arm32_static.tar.gz
+            n2os_smb_client.arm32_static_mit.tar.gz
