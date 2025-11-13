@@ -7,3 +7,4 @@ megalinter-reports/
 smb.conf
 nn_krb5.conf
 arm32-static/
+docker/muslcc-builder/.env

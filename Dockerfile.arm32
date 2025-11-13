@@ -1,35 +1,17 @@
 # syntax=docker/dockerfile:1.5
 #
-# Build static ARM32 binaries (hard-float + soft-float) using musl cross toolchains:
+# Build static ARM32 binaries (hard-float + soft-float) using a musl toolchain base image.
 #   docker build -f Dockerfile.arm32 -t smb-arm32 .
 # Copy artifacts out (requires BuildKit):
 #   docker build -f Dockerfile.arm32 --output out_dir .
 
-FROM debian:bookworm AS builder
+ARG MUSL_BASE_IMAGE=flozano/bookworm-muslcc-build:latest
+FROM ${MUSL_BASE_IMAGE} AS builder
 
 ARG KRB_IMPL=NONE
 ENV KRB_IMPL=${KRB_IMPL}
 ENV DEBIAN_FRONTEND=noninteractive
 ENV ARTIFACT_DIR=/artifacts
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    build-essential \
-    ninja-build \
-    cmake \
-    pkg-config \
-    python3 \
-    file \
-    xz-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /opt && \
-    curl -fsSL https://musl.cc/arm-linux-musleabihf-cross.tgz | tar -xz -C /opt && \
-    curl -fsSL https://musl.cc/arm-linux-musleabi-cross.tgz | tar -xz -C /opt
-
-ENV ARM32_TOOLCHAINS="armhf:arm-linux-musleabihf:/opt/arm-linux-musleabihf-cross armel:arm-linux-musleabi:/opt/arm-linux-musleabi-cross"
 
 WORKDIR /usr/src/n2os-smb-client
 COPY . .

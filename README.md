@@ -27,6 +27,14 @@ ls arm32-static
 ```
 This yields `n2os_smb_client.linux_armhf_static_musl` and `n2os_smb_client.linux_armel_static_musl`, both built against musl for fully static deployment. (Kerberos is currently disabled for musl builds.)
 
+To speed up repeated builds you can pre-build the musl toolchain base image:
+```bash
+cd docker/muslcc-builder
+cp .env.example .env   # adjust registry/tag/platform if needed
+make                   # builds flozano/bookworm-muslcc-build:latest via buildx
+```
+`Dockerfile.arm32` already defaults to `FROM flozano/bookworm-muslcc-build:latest`; rebuild/push the base image whenever you need updated toolchains or packages.
+
 Use Docker-based emulation to sanity check the binaries (requires Docker Desktop or binfmt-qemu on Linux):
 ```bash
 ./scripts/test.arm32.static.sh arm32-static
