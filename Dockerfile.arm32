@@ -1,41 +1,17 @@
 # syntax=docker/dockerfile:1.5
 #
-# Build static ARM32 binaries (hard-float + soft-float):
+# Build static ARM32 binaries (hard-float + soft-float) using a musl toolchain base image.
 #   docker build -f Dockerfile.arm32 -t smb-arm32 .
 # Copy artifacts out (requires BuildKit):
 #   docker build -f Dockerfile.arm32 --output out_dir .
 
-FROM debian:bookworm AS builder
+ARG MUSL_BASE_IMAGE=flozano/bookworm-muslcc-build:latest
+FROM ${MUSL_BASE_IMAGE} AS builder
 
 ARG KRB_IMPL=NONE
 ENV KRB_IMPL=${KRB_IMPL}
 ENV DEBIAN_FRONTEND=noninteractive
 ENV ARTIFACT_DIR=/artifacts
-
-RUN dpkg --add-architecture armhf && dpkg --add-architecture armel && \
-    apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    git \
-    build-essential \
-    ninja-build \
-    cmake \
-    pkg-config \
-    python3 \
-    file \
-    gcc-arm-linux-gnueabihf \
-    g++-arm-linux-gnueabihf \
-    libc6-dev-armhf-cross \
-    gcc-arm-linux-gnueabi \
-    g++-arm-linux-gnueabi \
-    libc6-dev-armel-cross \
-    && if [ "$KRB_IMPL" = "MIT" ]; then \
-        apt-get install -y --no-install-recommends \
-            libkrb5-dev:armhf \
-            libgssapi-krb5-dev:armhf \
-            libkrb5-dev:armel \
-            libgssapi-krb5-dev:armel; \
-       fi \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src/n2os-smb-client
 COPY . .

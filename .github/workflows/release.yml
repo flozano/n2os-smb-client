@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  KRB_IMPL_DEFAULT: NONE
+  SMB_TEST_PASSWORD: CiPassword123_
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build static ARM32 (musl)
+        run: |
+          docker buildx build \
+            --file Dockerfile.arm32 \
+            --build-arg KRB_IMPL=NONE \
+            --output type=local,dest=arm32-static \
+            .
+
+      - name: Run Samba smoke tests (ARM32)
+        env:
+          SMB_PASSWORD: ${{ env.SMB_TEST_PASSWORD }}
+          NET_NAME: smb-ci
+          ARTIFACT_DIR: arm32-static
+        run: |
+          ./scripts/samba-smoke.sh "${ARTIFACT_DIR}"
+
+      - name: Package ARM32 artifacts
+        run: |
+          tar czf n2os_smb_client.arm32_static.tar.gz -C arm32-static artifacts
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            n2os_smb_client.arm32_static.tar.gz
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            n2os_smb_client.arm32_static.tar.gz
