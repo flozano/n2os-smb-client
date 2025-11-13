@@ -13,7 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "deps/json-c/json.h"
+#include <json.h>
 // clang-format off
 #include "deps/libsmb2/include/smb2/smb2.h"
 #include "deps/libsmb2/include/smb2/libsmb2.h"

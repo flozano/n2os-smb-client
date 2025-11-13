@@ -4,7 +4,14 @@ This is a custom smb/cifs client with libsmb2 statically linked.
 
 ## Building
 
-KRB_IMPL env variable must be defined (MIT or HEIMDAL)
+Initialize submodules before configuring so the bundled dependencies are available:
+```bash
+git submodule update --init --recursive
+```
+The libsmb2 and json-c libraries are built from those submodules on every platform.
+
+KRB_IMPL env variable must be defined (MIT, HEIMDAL, or NONE).
+Use NONE to skip Kerberos/GSSAPI detection entirely (only NTLM/Basic auth will be available).
 HEIMDAL is currently not working.
 
 -DHAVE_LIBKRB5 is generating a warning in Linux build with MIT because we are forcing libsmb2 to compile with krb5 support.
@@ -27,12 +34,12 @@ Build and usage examples are provided in the [Dockerfile](Dockerfile.linux) itse
 
 A build script is provided in [build.macos.debug.sh](build.macos.debug.sh).
 
-requires:
-``` brew install json-c ```
+Kerberos builds require Homebrew Heimdal:
+```bash
+brew install heimdal
+```
 
-``` brew install heimdal ```
-
-currently supports only ntlmssp auth.
+Currently supports only ntlmssp auth.
 
 ## Usage
 
