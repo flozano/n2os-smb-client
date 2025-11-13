@@ -22,28 +22,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            cmake \
-            ninja-build \
-            pkg-config \
-            libkrb5-dev \
-            libgssapi-krb5-2 \
-            libssl-dev \
-            upx-ucl
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-
-      - name: Build Linux x86_64 binary
-        env:
-          KRB_IMPL: ${{ env.KRB_IMPL_DEFAULT }}
-        run: |
-          ./build.linux.sh
-          tar czf n2os_smb_client.linux_x86_64.tar.gz -C bin n2os_smb_client.linux
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -71,22 +51,6 @@ jobs:
             -v "${SHARE_DIR}":/share \
             dperson/samba -S -u "ci;${SMB_TEST_PASSWORD}" -s "ci;/share;yes;yes;yes;ci"
           sleep 15
-
-      - name: Functional smoke test (x86_64, ls/put/get)
-        run: |
-          set -euo pipefail
-          docker run --rm --network smb-ci \
-            -e N2OS_SMB_PASSWORD="${SMB_TEST_PASSWORD}" \
-            -v "${GITHUB_WORKSPACE}":/workspace \
-            -w /workspace \
-            debian:bookworm bash -c '\
-              set -euo pipefail; \
-              echo "native smoke" > /tmp/ci_upload.txt; \
-              ./bin/n2os_smb_client.linux put /tmp/ci_upload.txt smb://ci@samba-test/ci/ci_upload.txt; \
-              ./bin/n2os_smb_client.linux ls smb://ci@samba-test/ci; \
-              ./bin/n2os_smb_client.linux get smb://ci@samba-test/ci/ci_upload.txt /tmp/ci_download.txt; \
-              diff -u /tmp/ci_upload.txt /tmp/ci_download.txt \
-            '
 
       - name: Functional smoke test (ARM32, ls/put/get)
         run: |
@@ -119,12 +83,10 @@ jobs:
         with:
           name: build-artifacts
           path: |
-            n2os_smb_client.linux_x86_64.tar.gz
             n2os_smb_client.arm32_static.tar.gz
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            n2os_smb_client.linux_x86_64.tar.gz
             n2os_smb_client.arm32_static.tar.gz
