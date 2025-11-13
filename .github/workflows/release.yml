@@ -36,39 +36,13 @@ jobs:
             --output type=local,dest=arm32-static \
             .
 
-      - name: Prepare Samba test environment
+      - name: Run Samba smoke tests (ARM32)
+        env:
+          SMB_PASSWORD: ${{ env.SMB_TEST_PASSWORD }}
+          NET_NAME: smb-ci
+          ARTIFACT_DIR: arm32-static
         run: |
-          set -euo pipefail
-          SHARE_DIR="${GITHUB_WORKSPACE}/ci_share"
-          mkdir -p "${SHARE_DIR}"
-          docker network create smb-ci
-          docker run -d --name samba-test --network smb-ci \
-            -h samba-test \
-            -v "${SHARE_DIR}":/share \
-            dperson/samba -S -u "ci;${SMB_TEST_PASSWORD}" -s "ci;/share;yes;yes;yes;ci"
-          sleep 15
-
-      - name: Functional smoke test (ARM32, ls/put/get)
-        run: |
-          set -euo pipefail
-          docker run --rm --platform linux/arm/v7 --network smb-ci \
-            -e N2OS_SMB_PASSWORD="${SMB_TEST_PASSWORD}" \
-            -v "${GITHUB_WORKSPACE}":/workspace \
-            -w /workspace \
-            debian:bookworm bash -c '\
-              set -euo pipefail; \
-              echo "arm smoke" > /tmp/ci_arm_upload.txt; \
-              /workspace/arm32-static/artifacts/n2os_smb_client.linux_armhf_static_musl put /tmp/ci_arm_upload.txt smb://ci@samba-test/ci/ci_arm_upload.txt; \
-              /workspace/arm32-static/artifacts/n2os_smb_client.linux_armhf_static_musl ls smb://ci@samba-test/ci; \
-              /workspace/arm32-static/artifacts/n2os_smb_client.linux_armhf_static_musl get smb://ci@samba-test/ci/ci_arm_upload.txt /tmp/ci_arm_download.txt; \
-              diff -u /tmp/ci_arm_upload.txt /tmp/ci_arm_download.txt \
-            '
-
-      - name: Tear down Samba test environment
-        if: always()
-        run: |
-          docker rm -f samba-test || true
-          docker network rm smb-ci || true
+          ./scripts/samba-smoke.sh "${ARTIFACT_DIR}"
 
       - name: Package ARM32 artifacts
         run: |

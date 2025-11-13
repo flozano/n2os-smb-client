@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 ARTIFACT_DIR="${1:-arm32-static}"
 SMB_SHARE="${SMB_SHARE:-smb://ci@samba-test/ci}"
 SMB_PASSWORD="${SMB_PASSWORD:-CiPassword123_}"
+DOCKER_NETWORK_ARGS=()
+if [[ -n "${DOCKER_NETWORK:-}" ]]; then
+    DOCKER_NETWORK_ARGS=(--network "${DOCKER_NETWORK}")
+fi
 
 if [[ -d "${ARTIFACT_DIR}/artifacts" ]]; then
     ARTIFACT_DIR="${ARTIFACT_DIR}/artifacts"
@@ -43,6 +46,7 @@ docker run --rm \
     -e N2OS_SMB_PASSWORD="${SMB_PASSWORD}" \
     -e SMB_SHARE="${SMB_SHARE}" \
     -e ARM_BIN="/artifacts/${ARMHF_NAME}" \
+    "${DOCKER_NETWORK_ARGS[@]}" \
     debian:bookworm-slim bash -c 'set -euo pipefail; \
       printf "test-armhf" > /tmp/payload.txt; \
       "$ARM_BIN" put /tmp/payload.txt "$SMB_SHARE"/ci_armhf_upload.txt;\
@@ -58,6 +62,7 @@ docker run --rm \
     -e N2OS_SMB_PASSWORD="${SMB_PASSWORD}" \
     -e SMB_SHARE="${SMB_SHARE}" \
     -e ARM_BIN="/artifacts/${ARMEL_NAME}" \
+    "${DOCKER_NETWORK_ARGS[@]}" \
     debian:bookworm-slim bash -c 'set -euo pipefail;\
       printf "test-armel" > /tmp/payload.txt;\
       "$ARM_BIN" put /tmp/payload.txt "$SMB_SHARE"/ci_armel_upload.txt;\
