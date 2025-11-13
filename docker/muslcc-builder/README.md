@@ -4,11 +4,11 @@ Utility image that installs the musl.cc cross toolchains (armhf/armel) plus the 
 
 ## Build
 
-Copy `.env.example` to `.env`, adjust `IMAGE_NAME`, `TAG`, and `PLATFORM` if necessary, then:
+Copy `.env.example` to `.env`, adjust `IMAGE_NAME`, `TAG`, and `PLATFORMS` if necessary, then:
 ```bash
 cd docker/muslcc-builder
-make          # builds on linux/amd64 via buildx --platform (works even on Apple Silicon)
-# make push   # pushes to docker hub after docker login
+make          # builds the first platform locally (default linux/amd64 via buildx)
+# make push   # pushes a multi-arch image (default linux/amd64 + linux/arm64)
 ```
 
 ## Use
