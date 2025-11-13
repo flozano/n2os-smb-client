@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ARTIFACT_DIR="${1:-arm32-static}"
+SMB_SHARE="${SMB_SHARE:-smb://ci@samba-test/ci}"
+SMB_PASSWORD="${SMB_PASSWORD:-CiPassword123_}"
 
 if [[ -d "${ARTIFACT_DIR}/artifacts" ]]; then
     ARTIFACT_DIR="${ARTIFACT_DIR}/artifacts"
@@ -38,11 +40,14 @@ echo "Running put/ls/get smoke test for hard-float binary (arm/v7)..."
 docker run --rm \
     --platform linux/arm/v7 \
     -v "${ABS_ARTIFACT_DIR}:/artifacts:ro" \
+    -e N2OS_SMB_PASSWORD="${SMB_PASSWORD}" \
+    -e SMB_SHARE="${SMB_SHARE}" \
+    -e ARM_BIN="/artifacts/${ARMHF_NAME}" \
     debian:bookworm-slim bash -c 'set -euo pipefail; \
       printf "test-armhf" > /tmp/payload.txt; \
-      /artifacts/'"${ARMHF_NAME}"' put /tmp/payload.txt smb://ci@samba-test/ci/ci_armhf_upload.txt;\
-      /artifacts/'"${ARMHF_NAME}"' ls smb://ci@samba-test/ci;\
-      /artifacts/'"${ARMHF_NAME}"' get smb://ci@samba-test/ci/ci_armhf_upload.txt /tmp/payload_out.txt;\
+      "$ARM_BIN" put /tmp/payload.txt "$SMB_SHARE"/ci_armhf_upload.txt;\
+      "$ARM_BIN" ls "$SMB_SHARE";\
+      "$ARM_BIN" get "$SMB_SHARE"/ci_armhf_upload.txt /tmp/payload_out.txt;\
       diff -u /tmp/payload.txt /tmp/payload_out.txt'
 
 echo
@@ -50,11 +55,14 @@ echo "Running put/ls/get smoke test for soft-float binary (arm/v5)..."
 docker run --rm \
     --platform linux/arm/v5 \
     -v "${ABS_ARTIFACT_DIR}:/artifacts:ro" \
+    -e N2OS_SMB_PASSWORD="${SMB_PASSWORD}" \
+    -e SMB_SHARE="${SMB_SHARE}" \
+    -e ARM_BIN="/artifacts/${ARMEL_NAME}" \
     debian:bookworm-slim bash -c 'set -euo pipefail;\
       printf "test-armel" > /tmp/payload.txt;\
-      /artifacts/'"${ARMEL_NAME}"' put /tmp/payload.txt smb://ci@samba-test/ci/ci_armel_upload.txt;\
-      /artifacts/'"${ARMEL_NAME}"' ls smb://ci@samba-test/ci;\
-      /artifacts/'"${ARMEL_NAME}"' get smb://ci@samba-test/ci/ci_armel_upload.txt /tmp/payload_out.txt;\
+      "$ARM_BIN" put /tmp/payload.txt "$SMB_SHARE"/ci_armel_upload.txt;\
+      "$ARM_BIN" ls "$SMB_SHARE";\
+      "$ARM_BIN" get "$SMB_SHARE"/ci_armel_upload.txt /tmp/payload_out.txt;\
       diff -u /tmp/payload.txt /tmp/payload_out.txt'
 
 echo
