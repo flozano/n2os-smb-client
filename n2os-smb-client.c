@@ -1,5 +1,6 @@
 // n2os-smb-client SMB v2/3 custom client
 // Copyright (c) 2013-present, Nozomi Networks Inc. All rights reserved.
+// Patched releases maintained by Francisco A. Lozano. (github.com/flozano)
 
 #include <errno.h>
 #include <fcntl.h>
@@ -13,7 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "deps/json-c/json.h"
+#include <json.h>
 // clang-format off
 #include "deps/libsmb2/include/smb2/smb2.h"
 #include "deps/libsmb2/include/smb2/libsmb2.h"
@@ -25,7 +26,7 @@
 #define MAXBUF (1024 * 64)
 #define ENV_PASSWORD_VAR "N2OS_SMB_PASSWORD"
 
-#define VERSION "0.3.7"
+#define VERSION "0.3.7-flozano"
 #define ECMDLINE 4
 #define ESMBINIT 5
 #define ESMBPARSE 6

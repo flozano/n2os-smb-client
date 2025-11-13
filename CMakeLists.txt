@@ -2,13 +2,30 @@ cmake_minimum_required(VERSION 3.12)
 
 project(n2os_smb_client)
 
-set(OPENSSL_USE_STATIC_LIBS TRUE)
-find_package(OpenSSL REQUIRED)
+# No direct OpenSSL dependency currently. Leave option for future use.
+option(USE_OPENSSL "Enable OpenSSL support" OFF)
+if(USE_OPENSSL)
+    set(OPENSSL_USE_STATIC_LIBS TRUE)
+    find_package(OpenSSL REQUIRED)
+endif()
 
-add_compile_options("-O2" "-fPIE" "-fPIC" "-fstack-protector" "-D_FORTIFY_SOURCE=2")
+option(ENABLE_STATIC_LINKING "Link n2os_smb_client statically" OFF)
 
-if(NOT APPLE)
-    add_link_options("-pie" "-Wl,-z,relro,-z,now")
+set(COMMON_COMPILE_OPTIONS "-O2" "-fPIC" "-fstack-protector" "-D_FORTIFY_SOURCE=2")
+if(NOT ENABLE_STATIC_LINKING)
+    list(APPEND COMMON_COMPILE_OPTIONS "-fPIE")
+endif()
+add_compile_options(${COMMON_COMPILE_OPTIONS})
+
+if(ENABLE_STATIC_LINKING)
+    if(APPLE)
+        message(FATAL_ERROR "ENABLE_STATIC_LINKING is not supported on macOS.")
+    endif()
+    add_link_options("-static" "-static-libgcc")
+else()
+    if(NOT APPLE)
+        add_link_options("-pie" "-Wl,-z,relro,-z,now")
+    endif()
 endif()
 
 set(CMAKE_CXX_STANDARD 11)
@@ -26,29 +43,53 @@ endif()
 set(LIBSMB2_DIR "${PROJECT_SOURCE_DIR}/deps/libsmb2")
 message(STATUS "Lib smb2: ${LIBSMB2_DIR}")
 
-include(${CMAKE_CURRENT_LIST_DIR}/FindKrb5.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/FindGssApi.cmake)
-
-if(NOT LibKrb5_FOUND)
-    message(FATAL_ERROR "Kerberos libraries not found. Please install krb5 development packages.")
+if(NOT DEFINED KRB_IMPL)
+    message(FATAL_ERROR "KRB_IMPL must be defined (MIT, HEIMDAL, or NONE).")
 endif()
 
-if(NOT GSSAPI_FOUND)
-    message(FATAL_ERROR "GSSAPI libraries not found. Please install GSSAPI development packages.")
+string(TOUPPER "${KRB_IMPL}" KRB_IMPL_UPPER)
+set(ENABLE_KERBEROS TRUE)
+if(KRB_IMPL_UPPER STREQUAL "NONE")
+    set(ENABLE_KERBEROS FALSE)
+    message(STATUS "Kerberos support disabled (KRB_IMPL=NONE)")
 endif()
 
-message(STATUS "LibKrb5_LIBRARY: ${LibKrb5_LIBRARY}")
-message(STATUS "LibKrb5_INCLUDE_DIR: ${LibKrb5_INCLUDE_DIR}")
-message(STATUS "LibKrb5_IMPL: ${LibKrb5_IMPL}")
+if(ENABLE_KERBEROS)
+    include(${CMAKE_CURRENT_LIST_DIR}/FindKrb5.cmake)
+    include(${CMAKE_CURRENT_LIST_DIR}/FindGssApi.cmake)
 
-message(STATUS "GSSAPI_LIBRARY: ${GSSAPI_LIBRARY}")
-message(STATUS "GSSAPI_INCLUDE_DIR: ${GSSAPI_INCLUDE_DIR}")
-message(STATUS "KRB_IMPL: ${KRB_IMPL}")
+    if(NOT LibKrb5_FOUND)
+        message(FATAL_ERROR "Kerberos libraries not found. Please install krb5 development packages.")
+    endif()
 
-include_directories(BEFORE SYSTEM ${GSSAPI_INCLUDE_DIR} ${LibKrb5_INCLUDE_DIR})
+    if(NOT GSSAPI_FOUND)
+        message(FATAL_ERROR "GSSAPI libraries not found. Please install GSSAPI development packages.")
+    endif()
 
-# force compile with krb5, library removes the support if krb5 is not found
-add_definitions(-DHAVE_LIBKRB5)
+    message(STATUS "LibKrb5_LIBRARY: ${LibKrb5_LIBRARY}")
+    message(STATUS "LibKrb5_INCLUDE_DIR: ${LibKrb5_INCLUDE_DIR}")
+    message(STATUS "LibKrb5_IMPL: ${LibKrb5_IMPL}")
+
+    message(STATUS "GSSAPI_LIBRARY: ${GSSAPI_LIBRARY}")
+    message(STATUS "GSSAPI_INCLUDE_DIR: ${GSSAPI_INCLUDE_DIR}")
+    message(STATUS "KRB_IMPL: ${KRB_IMPL}")
+
+    include_directories(BEFORE SYSTEM ${GSSAPI_INCLUDE_DIR} ${LibKrb5_INCLUDE_DIR})
+
+    # force compile with krb5, library removes the support if krb5 is not found
+    add_definitions(-DHAVE_LIBKRB5)
+else()
+    message(STATUS "Skipping Kerberos/GSSAPI discovery.")
+endif()
+
+# Propagate Kerberos toggles down to libsmb2
+if(ENABLE_KERBEROS)
+    set(ENABLE_LIBKRB5 ON CACHE BOOL "Enable libkrb5 in libsmb2" FORCE)
+    set(ENABLE_GSSAPI ON CACHE BOOL "Enable GSSAPI in libsmb2" FORCE)
+else()
+    set(ENABLE_LIBKRB5 OFF CACHE BOOL "Enable libkrb5 in libsmb2" FORCE)
+    set(ENABLE_GSSAPI OFF CACHE BOOL "Enable GSSAPI in libsmb2" FORCE)
+endif()
 
 add_subdirectory(${LIBSMB2_DIR})
 include_directories(${LIBSMB2_DIR}/include/smb2)
@@ -56,36 +97,21 @@ include_directories(${LIBSMB2_DIR}/include)
 
 
 ## LIB JSON-C
-if(APPLE)
-    # Use Homebrew's json-c on macOS
-    execute_process(COMMAND brew --prefix json-c
-        OUTPUT_VARIABLE BREW_JSONC_PREFIX
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    set(JSONC_INCLUDE_DIR "${BREW_JSONC_PREFIX}/include")
-    set(JSONC_LIBRARY "${BREW_JSONC_PREFIX}/lib/libjson-c.dylib")
-    message(STATUS "Using Homebrew json-c at: ${BREW_JSONC_PREFIX}")
-    
-    include_directories(${JSONC_INCLUDE_DIR})
-    link_directories(${BREW_JSONC_PREFIX}/lib)
-else()
-    set(LIBJSONC_DIR "${PROJECT_SOURCE_DIR}/deps/json-c")
-    message(STATUS "Lib json-c: ${LIBJSONC_DIR}")
-    add_subdirectory(${LIBJSONC_DIR})
-    include_directories(${LIBJSONC_DIR})
+set(LIBJSONC_DIR "${PROJECT_SOURCE_DIR}/deps/json-c")
+if(NOT EXISTS "${LIBJSONC_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "json-c submodule not found. Run `git submodule update --init --recursive`.")
 endif()
-
-# Finalize
-if(APPLE)
-    link_libraries(${GSSAPI_LIBRARY} ${LibKrb5_LIBRARY} smb2 ${JSONC_LIBRARY})
-else()
-    link_libraries(${GSSAPI_LIBRARY} ${LibKrb5_LIBRARY} smb2 json-c)
-endif()
+message(STATUS "Lib json-c: ${LIBJSONC_DIR}")
+add_subdirectory(${LIBJSONC_DIR})
+include_directories(${LIBJSONC_DIR})
+include_directories(${CMAKE_BINARY_DIR}/deps/json-c)
 
 add_executable(n2os_smb_client n2os-smb-client.c)
 
-if(APPLE)
-    target_link_libraries(n2os_smb_client ${GSSAPI_LIBRARY} ${LibKrb5_LIBRARY} smb2 ${JSONC_LIBRARY})
-else()
-    target_link_libraries(n2os_smb_client ${GSSAPI_LIBRARY} ${LibKrb5_LIBRARY} smb2 json-c)
+set(N2OS_CLIENT_LIBS smb2 json-c)
+
+if(ENABLE_KERBEROS)
+    list(APPEND N2OS_CLIENT_LIBS ${GSSAPI_LIBRARY} ${LibKrb5_LIBRARY})
 endif()
+
+target_link_libraries(n2os_smb_client ${N2OS_CLIENT_LIBS})
