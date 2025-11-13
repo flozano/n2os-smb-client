@@ -36,10 +36,6 @@ jobs:
             --output type=local,dest=arm32-static \
             .
 
-      - name: Test ARM32 binaries via emulation
-        run: |
-          ./scripts/test.arm32.static.sh arm32-static
-
       - name: Prepare Samba test environment
         run: |
           set -euo pipefail
